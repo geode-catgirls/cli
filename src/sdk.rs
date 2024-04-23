@@ -408,7 +408,7 @@ fn fetch_repo_info(repo: &git2::Repository) -> git2::MergeAnalysis {
 	});
 
 	let res = remote.fetch(
-		&["main"],
+		&["ios"],
 		Some(FetchOptions::new().remote_callbacks(callbacks)),
 		None,
 	);
@@ -418,7 +418,11 @@ fn fetch_repo_info(repo: &git2::Repository) -> git2::MergeAnalysis {
 	}) {
 		// Setting the authentication callback is kinda jank, just call the git process lmao
 		Command::new("git")
+<<<<<<< HEAD
 			.args(["fetch", "origin", "main"])
+=======
+			.args(&["fetch", "origin", "ios"])
+>>>>>>> bed097e (wah !!)
 			.current_dir(Config::sdk_path())
 			.spawn()
 			.nice_unwrap("Could not fetch latest update")
@@ -488,16 +492,16 @@ fn update(config: &mut Config, branch: Option<String>) {
 }
 
 fn switch_to_ref(repo: &Repository, name: &str) {
-	let mut reference = repo.find_reference("refs/heads/main").unwrap();
+	let mut reference = repo.find_reference("refs/heads/ios").unwrap();
 	let fetch_head = repo.find_reference("FETCH_HEAD").unwrap();
 	let fetch_commit = repo.reference_to_annotated_commit(&fetch_head).unwrap();
 
 	reference
 		.set_target(fetch_commit.id(), "Fast-Forward")
 		.unwrap();
-	repo.set_head("refs/heads/main").unwrap();
+	repo.set_head("refs/heads/ios").unwrap();
 	repo.checkout_head(Some(CheckoutBuilder::default().force()))
-		.nice_unwrap("Failed to checkout main");
+		.nice_unwrap("Failed to checkout ios");
 
 	let (obj, refer) = repo.revparse_ext(name).unwrap();
 	repo.checkout_tree(&obj, None)
@@ -513,7 +517,7 @@ fn switch_to_tag(config: &mut Config, repo: &Repository) {
 	info!("Updating head");
 
 	if config.sdk_nightly {
-		switch_to_ref(repo, "refs/heads/main");
+		switch_to_ref(repo, "refs/heads/ios");
 		info!("Switched to latest commit");
 		return;
 	} else if let Some(ver) = config.sdk_version.clone() {
