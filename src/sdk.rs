@@ -371,7 +371,7 @@ fn install(config: &mut Config, path: PathBuf, force: bool) {
 
 	info!("Downloading SDK");
 
-	let repo = clone_repo("https://github.com/geode-sdk/geode", &path)
+	let repo = clone_repo("https://github.com/geode-catgirls/geode", &path)
 		.nice_unwrap("Could not download SDK");
 
 	// set GEODE_SDK environment variable;
