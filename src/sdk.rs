@@ -418,11 +418,7 @@ fn fetch_repo_info(repo: &git2::Repository) -> git2::MergeAnalysis {
 	}) {
 		// Setting the authentication callback is kinda jank, just call the git process lmao
 		Command::new("git")
-<<<<<<< HEAD
-			.args(["fetch", "origin", "main"])
-=======
 			.args(&["fetch", "origin", "ios"])
->>>>>>> bed097e (wah !!)
 			.current_dir(Config::sdk_path())
 			.spawn()
 			.nice_unwrap("Could not fetch latest update")
