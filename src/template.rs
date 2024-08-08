@@ -40,9 +40,9 @@ fn create_template(template: CreateTemplate) {
 	} else if template.template.contains('/') {
 		(template.template.as_str(), "main")
 	} else if template.template.is_empty() {
-		("geode-sdk/example-mod", "main")
+		("geode-catgirls/example-mod", "main")
 	} else {
-		("geode-sdk/example-mod", match template.template.to_ascii_lowercase().as_str() {
+		("geode-catgirls/example-mod", match template.template.to_ascii_lowercase().as_str() {
 			"default" => "main",
 			"minimal" => "minimal",
 			"custom layer" => "custom-layer",
@@ -99,7 +99,7 @@ fn create_template(template: CreateTemplate) {
 	}
 
 	// Add cross-platform action
-	// Download the action from https://raw.githubusercontent.com/geode-sdk/build-geode-mod/main/examples/multi-platform.yml
+	// Download the action from https://raw.githubusercontent.com/geode-catgirls/build-geode-mod/main/examples/multi-platform.yml
 	if template.action {
 		let action_path = template
 			.project_location
