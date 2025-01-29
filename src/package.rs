@@ -83,11 +83,13 @@ pub enum Package {
 	},
 }
 
-pub fn install(config: &mut Config, pkg_path: &Path) {
+pub fn install(config: &Config, pkg_path: &Path) {
 	let mod_path = config.get_current_profile().mods_dir();
 
 	if !mod_path.exists() {
-		fs::create_dir_all(&mod_path).nice_unwrap("Could not setup mod installation");
+		warn!("Path {mod_path:?} does not exist, creating it");
+		warn!("(Is your profile set up correctly?)");
+		fs::create_dir_all(&mod_path).nice_unwrap("Failed to create path");
 	}
 	fs::copy(pkg_path, mod_path.join(pkg_path.file_name().unwrap()))
 		.nice_unwrap("Could not install mod");
@@ -141,16 +143,7 @@ fn zip_folder(path: &Path, output: &Path) {
 	);
 }
 
-pub fn get_working_dir(id: &String) -> PathBuf {
-	let working_dir = dirs::cache_dir().unwrap().join("geode_pkg").join(id);
-	// why would u do that :(
-	// fs::remove_dir_all(&working_dir).unwrap_or(());
-	fs::create_dir_all(&working_dir).unwrap_or(());
-	working_dir
-}
-
 fn create_resources(
-	#[allow(unused)] config: &mut Config,
 	mod_info: &ModFileInfo,
 	#[allow(unused_mut)] mut cache_bundle: &mut Option<CacheBundle>,
 	cache: &mut cache::ResourceCache,
@@ -200,7 +193,7 @@ fn create_resources(
 			spritesheet::downscale(&mut sprite, 2);
 			sprite.save(output_dir.join(base.to_string() + ".png"))
 		})()
-		.nice_unwrap(&format!(
+		.nice_unwrap(format!(
 			"Unable to copy sprite at {}",
 			sprite_path.display()
 		));
@@ -212,7 +205,7 @@ fn create_resources(
 	// Move other resources
 	for file in &mod_info.resources.files {
 		std::fs::copy(file, output_dir.join(file.file_name().unwrap()))
-			.nice_unwrap(&format!("Unable to copy file at '{}'", file.display()));
+			.nice_unwrap(format!("Unable to copy file at '{}'", file.display()));
 	}
 
 	if !&mod_info.resources.libraries.is_empty() {
@@ -221,16 +214,11 @@ fn create_resources(
 	// Move other resources
 	for file in &mod_info.resources.libraries {
 		std::fs::copy(file, working_dir.join(file.file_name().unwrap()))
-			.nice_unwrap(&format!("Unable to copy file at '{}'", file.display()));
+			.nice_unwrap(format!("Unable to copy file at '{}'", file.display()));
 	}
 }
 
-fn create_package_resources_only(
-	config: &mut Config,
-	root_path: &Path,
-	output_dir: &PathBuf,
-	shut_up: bool,
-) {
+fn create_package_resources_only(root_path: &Path, output_dir: &PathBuf, shut_up: bool) {
 	// Parse mod.json
 	let mod_info = parse_mod_info(root_path);
 
@@ -239,7 +227,6 @@ fn create_package_resources_only(
 	let mut new_cache = cache::ResourceCache::new();
 
 	create_resources(
-		config,
 		&mod_info,
 		&mut cache_bundle,
 		&mut new_cache,
@@ -254,7 +241,6 @@ fn create_package_resources_only(
 }
 
 fn create_package(
-	config: &mut Config,
 	root_path: &Path,
 	binaries: Vec<PathBuf>,
 	raw_output: Option<PathBuf>,
@@ -263,6 +249,7 @@ fn create_package(
 	// Parse mod.json
 	let mod_file_info = parse_mod_info(root_path);
 
+	// path to the final .geode file
 	let mut output = raw_output.unwrap_or(root_path.join(format!("{}.geode", mod_file_info.id)));
 
 	// If it's a directory, add file path to it
@@ -282,22 +269,22 @@ fn create_package(
 	}
 
 	// Setup working directory
-	let working_dir = get_working_dir(&mod_file_info.id);
+	let temp_working_dir = tempfile::tempdir().nice_unwrap("Could not create temporary directory");
+	let working_dir = temp_working_dir.path();
 
 	// Move mod.json
 	fs::copy(root_path.join("mod.json"), working_dir.join("mod.json")).unwrap();
 
-	// Setup cache
+	// Setup cache from the previously built .geode archive
 	let mut cache_bundle = cache::get_cache_bundle(&output);
 	let mut new_cache = cache::ResourceCache::new();
 
 	// Create resources
 	create_resources(
-		config,
 		&mod_file_info,
 		&mut cache_bundle,
 		&mut new_cache,
-		&working_dir,
+		working_dir,
 		&working_dir.join("resources").join(&mod_file_info.id),
 		false,
 	);
@@ -307,7 +294,7 @@ fn create_package(
 		let path = root_path.join(file);
 		if path.exists() {
 			std::fs::copy(path, working_dir.join(file))
-				.nice_unwrap(&format!("Could not copy {file}"));
+				.nice_unwrap(format!("Could not copy {file}"));
 		}
 	}
 
@@ -316,7 +303,7 @@ fn create_package(
 		for header in &api.include {
 			let out = working_dir.join(header);
 			out.parent().map(fs::create_dir_all);
-			fs::copy(root_path.join(header), &out).nice_unwrap(&format!(
+			fs::copy(root_path.join(header), &out).nice_unwrap(format!(
 				"Unable to copy header {} to {}",
 				header.display(),
 				out.display()
@@ -343,7 +330,7 @@ fn create_package(
 			) {
 			let binary = name.to_string_lossy().to_string() + "." + ext.to_string_lossy().as_ref();
 			std::fs::copy(path, working_dir.join(&binary))
-				.nice_unwrap(&format!("Unable to copy binary '{}'", binary));
+				.nice_unwrap(format!("Unable to copy binary '{}'", binary));
 			binaries_added = true;
 		}
 	}
@@ -359,6 +346,7 @@ fn create_package(
 			".android32.so",
 			".android64.so",
 			".so",
+			".pdb",
 		]
 		.iter()
 		.find(|x| binary_name.ends_with(**x))
@@ -367,7 +355,7 @@ fn create_package(
 		}
 
 		std::fs::copy(binary, working_dir.join(binary_name))
-			.nice_unwrap(&format!("Unable to copy binary at '{}'", binary.display()));
+			.nice_unwrap(format!("Unable to copy binary at '{}'", binary.display()));
 		binaries_added = true;
 	}
 
@@ -377,12 +365,13 @@ fn create_package(
 		info!("Help: Add a binary with `--binary <bin_path>`");
 	}
 
-	new_cache.save(&working_dir);
+	new_cache.save(working_dir);
 
-	zip_folder(&working_dir, &output);
+	zip_folder(working_dir, &output);
 
 	if do_install {
-		install(config, &output);
+		let config = Config::new().assert_is_setup();
+		install(&config, &output);
 	}
 }
 
@@ -460,16 +449,19 @@ fn merge_packages(inputs: Vec<PathBuf>) {
 	);
 }
 
-pub fn subcommand(config: &mut Config, cmd: Package) {
+pub fn subcommand(cmd: Package) {
 	match cmd {
-		Package::Install { path } => install(config, &path),
+		Package::Install { path } => {
+			let config = Config::new().assert_is_setup();
+			install(&config, &path);
+		}
 
 		Package::New {
 			root_path,
 			binary: binaries,
 			output,
 			install,
-		} => create_package(config, &root_path, binaries, output, install),
+		} => create_package(&root_path, binaries, output, install),
 
 		Package::Merge { packages } => {
 			if packages.len() < 2 {
@@ -483,12 +475,12 @@ pub fn subcommand(config: &mut Config, cmd: Package) {
 			input,
 			output,
 			externals,
-		} => project::check_dependencies(config, input, output, None, externals),
+		} => project::check_dependencies(input, output, None, externals),
 
 		Package::Resources {
 			root_path,
 			output,
 			shut_up,
-		} => create_package_resources_only(config, &root_path, &output, shut_up),
+		} => create_package_resources_only(&root_path, &output, shut_up),
 	}
 }

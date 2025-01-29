@@ -1,8 +1,7 @@
 use crate::config::Config;
 use crate::server::{ApiResponse, PaginatedData};
 use crate::util::logging::ask_value;
-use crate::util::mod_file::parse_mod_info;
-use crate::{done, fatal, index_admin, index_auth, index_dev, info, warn, NiceUnwrap};
+use crate::{done, fatal, index_admin, index_auth, index_dev, info, NiceUnwrap};
 use clap::Subcommand;
 use reqwest::header::USER_AGENT;
 use semver::VersionReq;
@@ -11,31 +10,30 @@ use serde_json::json;
 use sha3::{Digest, Sha3_256};
 use std::fs;
 use std::io::Cursor;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use zip::read::ZipFile;
 
 #[derive(Deserialize)]
 pub struct ServerModVersion {
+	#[allow(unused)]
 	pub name: String,
 	pub version: String,
 	pub download_link: String,
+	#[allow(unused)]
 	pub hash: String,
 }
 
 #[derive(Subcommand, Debug)]
 #[clap(rename_all = "kebab-case")]
 pub enum Index {
-	/// Create a new entry to be used in the index
-	New {
-		/// Output folder of entry
-		output: PathBuf,
-	},
-
 	/// Login with your GitHub account
 	Login {
 		/// Existing access token to use
 		#[clap(long)]
 		token: Option<String>,
+
+		#[clap(long, conflicts_with = "token")]
+		github_token: Option<String>
 	},
 
 	/// Invalidate all existing access tokens (logout)
@@ -162,100 +160,6 @@ pub fn install_mod(
 	dest
 }
 
-fn create_index_json(path: &Path) {
-	let url = ask_value("URL", None, true);
-
-	let response = reqwest::blocking::get(&url).nice_unwrap("Unable to access .geode file at URL");
-
-	let file_name = reqwest::Url::parse(&url)
-		.unwrap()
-		.path_segments()
-		.and_then(|segments| segments.last())
-		.and_then(|name| {
-			if name.is_empty() {
-				None
-			} else {
-				Some(name.to_string())
-			}
-		})
-		.unwrap_or_else(|| ask_value("Filename", None, true));
-
-	let file_contents = response
-		.bytes()
-		.nice_unwrap("Unable to access .geode file at URL");
-
-	let mut hasher = Sha3_256::new();
-	hasher.update(&file_contents);
-	let hash = hasher.finalize();
-
-	let platform_str = ask_value("Supported platforms (comma separated)", None, true);
-	let platforms = platform_str.split(',').collect::<Vec<_>>();
-
-	let category_str = ask_value("Categories (comma separated)", None, true);
-	let categories = category_str.split(',').collect::<Vec<_>>();
-
-	let index_json = json!({
-		"download": {
-			"url": url,
-			"name": file_name,
-			"hash": hex::encode(hash),
-			"platforms": platforms
-		},
-		"categories": categories
-	});
-
-	// Format neatly
-	let buf = Vec::new();
-	let formatter = serde_json::ser::PrettyFormatter::with_indent(b"\t");
-	let mut ser = serde_json::Serializer::with_formatter(buf, formatter);
-	index_json.serialize(&mut ser).unwrap();
-
-	// Write formatted json
-	std::fs::write(
-		path.join("index.json"),
-		String::from_utf8(ser.into_inner()).unwrap(),
-	)
-	.nice_unwrap("Unable to write to project");
-}
-
-fn create_entry(out_path: &Path) {
-	assert!(out_path.exists(), "Path does not exist");
-	assert!(out_path.is_dir(), "Path is not a directory");
-
-	let root_path = PathBuf::from(ask_value("Project root directory", Some("."), true));
-
-	let mod_json_path = root_path.join("mod.json");
-	let about_path = root_path.join("about.md");
-	let logo_path = root_path.join("logo.png");
-
-	assert!(mod_json_path.exists(), "Unable to find project mod.json");
-
-	// Get mod id
-	let mod_info = parse_mod_info(&mod_json_path);
-
-	let entry_path = out_path.join(mod_info.id);
-	if entry_path.exists() {
-		warn!("Directory not empty");
-	} else {
-		fs::create_dir(&entry_path).nice_unwrap("Unable to create folder");
-	}
-
-	create_index_json(&entry_path);
-	fs::copy(&mod_json_path, entry_path.join("mod.json")).nice_unwrap("Unable to copy mod.json");
-
-	if about_path.exists() {
-		fs::copy(&about_path, entry_path.join("about.md")).nice_unwrap("Unable to copy about.md");
-	} else {
-		warn!("No about.md found, skipping");
-	}
-
-	if logo_path.exists() {
-		fs::copy(&logo_path, entry_path.join("logo.png")).nice_unwrap("Unable to copy logo.png");
-	} else {
-		warn!("No logo.png found, skipping");
-	}
-}
-
 fn submit(action: MyModAction, config: &mut Config) {
 	let mut is_update = false;
 	let download_link = match action {
@@ -316,16 +220,7 @@ fn create_mod(download_link: &str, config: &mut Config) {
 
 	let client = reqwest::blocking::Client::new();
 
-	#[derive(Serialize)]
-	struct Payload {
-		download_link: String,
-	}
-
-	let payload = Payload {
-		download_link: download_link.to_string(),
-	};
-
-	let url = get_index_url("/v1/mods".to_string(), config);
+	let url = get_index_url("/v1/mods", config);
 
 	info!("Creating mod");
 
@@ -333,7 +228,7 @@ fn create_mod(download_link: &str, config: &mut Config) {
 		.post(url)
 		.header(USER_AGENT, "GeodeCLI")
 		.bearer_auth(config.index_token.clone().unwrap())
-		.json(&payload)
+		.json(&json!({ "download_link": download_link }))
 		.send()
 		.nice_unwrap("Unable to connect to Geode Index");
 
@@ -360,15 +255,6 @@ fn update_mod(id: &str, download_link: &str, config: &mut Config) {
 
 	let client = reqwest::blocking::Client::new();
 
-	#[derive(Serialize)]
-	struct Payload {
-		download_link: String,
-	}
-
-	let payload = Payload {
-		download_link: download_link.to_string(),
-	};
-
 	let url = get_index_url(format!("/v1/mods/{}/versions", id), config);
 
 	info!("Updating mod");
@@ -377,7 +263,7 @@ fn update_mod(id: &str, download_link: &str, config: &mut Config) {
 		.post(url)
 		.header(USER_AGENT, "GeodeCLI")
 		.bearer_auth(config.index_token.clone().unwrap())
-		.json(&payload)
+		.json(&json!({ "download_link": download_link }))
 		.send()
 		.nice_unwrap("Unable to connect to Geode Index");
 
@@ -408,11 +294,11 @@ fn set_index_url(url: String, config: &mut Config) {
 	info!("Index URL set to: {}", config.index_url);
 }
 
-pub fn get_index_url(path: String, config: &Config) -> String {
+pub fn get_index_url(path: impl AsRef<str>, config: &Config) -> String {
 	format!(
 		"{}/{}",
 		config.index_url.trim_end_matches('/'),
-		path.trim_start_matches('/')
+		path.as_ref().trim_start_matches('/')
 	)
 }
 
@@ -429,14 +315,12 @@ pub fn get_mod_versions(
 	let client = reqwest::blocking::Client::new();
 	let page = page.to_string();
 	let per_page = per_page.to_string();
-	let compare = compare.unwrap_or_default();
 	let platform = config.get_current_profile().platform_str().to_string();
 
-	let mut query: Vec<(&str, &str)> = vec![
-		("page", &page),
-		("per_page", &per_page),
-		("compare", &compare),
-	];
+	let mut query: Vec<(&str, &str)> = vec![("page", &page), ("per_page", &per_page)];
+	if let Some(c) = &compare {
+		query.push(("compare", c.as_str()));
+	}
 
 	if check_platform {
 		query.push(("platforms", &platform));
@@ -463,14 +347,21 @@ pub fn get_mod_versions(
 	Ok(body.payload)
 }
 
-pub fn subcommand(config: &mut Config, cmd: Index) {
+pub fn subcommand(cmd: Index) {
+	let mut _config = Config::new();
+	let config = &mut _config;
 	match cmd {
-		Index::New { output } => create_entry(&output),
 		Index::Install { id, version } => {
-			install_mod(config, &id, &version.unwrap_or(VersionReq::STAR), false);
+			let config = Config::new().assert_is_setup();
+			install_mod(
+				&config,
+				&id,
+				&version.unwrap_or(VersionReq::STAR),
+				false,
+			);
 			done!("Mod installed");
 		}
-		Index::Login { token } => index_auth::login(config, token),
+		Index::Login { token, github_token } => index_auth::login(config, token, github_token),
 		Index::Invalidate => index_auth::invalidate(config),
 		Index::Url { url } => {
 			if let Some(u) = url {
@@ -489,4 +380,5 @@ pub fn subcommand(config: &mut Config, cmd: Index) {
 		Index::Profile => index_dev::edit_profile(config),
 		Index::Admin { commands } => index_admin::subcommand(commands, config),
 	}
+	config.save();
 }

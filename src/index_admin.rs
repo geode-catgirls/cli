@@ -81,7 +81,16 @@ impl Display for PendingModVersion {
 		writeln!(f, "  - API: {}", self.api)?;
 		writeln!(f, "  - GD:")?;
 		writeln!(f, "    - Win: {}", self.gd.win.as_deref().unwrap_or("None"))?;
-		writeln!(f, "    - Mac: {}", self.gd.mac.as_deref().unwrap_or("None"))?;
+		writeln!(
+			f,
+			"    - Mac Intel: {}",
+			self.gd.mac_intel.as_deref().unwrap_or("None")
+		)?;
+		writeln!(
+			f,
+			"    - Mac ARM: {}",
+			self.gd.mac_arm.as_deref().unwrap_or("None")
+		)?;
 		writeln!(
 			f,
 			"    - Android 32: {}",
@@ -112,7 +121,10 @@ impl Display for PendingModVersion {
 #[derive(Debug, Deserialize, Clone)]
 struct PendingModGD {
 	win: Option<String>,
-	mac: Option<String>,
+	#[serde(rename = "mac-intel")]
+	mac_intel: Option<String>,
+	#[serde(rename = "mac-arm")]
+	mac_arm: Option<String>,
 	android32: Option<String>,
 	android64: Option<String>,
 	ios: Option<String>,
@@ -288,7 +300,7 @@ fn list_pending_mods(config: &Config) {
 fn get_developer_profile(username: &str, config: &Config) -> Option<DeveloperProfile> {
 	let client = reqwest::blocking::Client::new();
 
-	let url = index::get_index_url("/v1/developers".to_string(), config);
+	let url = index::get_index_url("/v1/developers", config);
 
 	let response = client
 		.get(url)

@@ -2,6 +2,11 @@ name: Build Binaries
 
 on:
   workflow_dispatch:
+    inputs:
+      debug:
+        description: enable tmate debug
+        default: false
+        type: boolean
   push:
     paths:
     - "src/**"
@@ -25,14 +30,22 @@ jobs:
 
         - name: "macOS"
           id: mac
-          os: macos-12
+          os: macos-latest
           executable: 'geode'
-          prebuild: 'export OPENSSL_STATIC=1'
+          prebuild: |
+            brew fetch --force --bottle-tag=ventura openssl@3
+            brew reinstall $(brew --cache --bottle-tag=ventura openssl@3)
+            export OPENSSL_STATIC=1
+            export OPENSSL_DIR="/opt/homebrew/opt/openssl@3"
           target: x86_64-apple-darwin
 
         - name: "Linux"
           id: linux
-          os: ubuntu-latest
+          os: ubuntu-22.04
+          # ubuntu-latest is currently a mix of 22.04 and 24.04
+          # so we are not able to use that until January 17, 2025 at least
+          # if we want compatibility with said version on GH actions
+          # see also https://github.com/actions/runner-images/issues/10636
           executable: 'geode'
           # some stupid old ubuntu versions cant install libssl3
           prebuild: 'export OPENSSL_STATIC=1'
@@ -69,6 +82,12 @@ jobs:
       with:
         name: geode-cli-${{ matrix.config.id }}
         path: ./out/
+
+    - name: Setup tmate session
+      if: ${{ failure() && inputs.debug && matrix.config.id == 'mac' }}
+      uses: mxschmitt/action-tmate@v3
+      with:
+        limit-access-to-actor: true
 
   publish:
     name: Publish

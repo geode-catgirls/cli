@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use image::{imageops, ImageFormat, RgbaImage, Rgba32FImage, Rgba, Pixel};
+use image::{imageops, ImageFormat, Pixel, Rgba, Rgba32FImage, RgbaImage};
 use serde_json::json;
 use texture_packer::exporter::ImageExporter;
 use texture_packer::texture::Texture;
@@ -67,7 +67,7 @@ impl SheetBundles {
 }
 
 pub fn read_to_image(path: &Path) -> RgbaImage {
-	image::io::Reader::open(path)
+	image::ImageReader::open(path)
 		.nice_unwrap(format!("Error reading sprite '{}'", path.display()))
 		.decode()
 		.nice_unwrap(format!("Error decoding sprite '{}'", path.display()))
@@ -106,8 +106,7 @@ pub fn downscale(img: &mut RgbaImage, factor: u32) {
 			r = (ch[0] * 255.0).round().clamp(0.0, 255.0) as u8;
 			g = (ch[1] * 255.0).round().clamp(0.0, 255.0) as u8;
 			b = (ch[2] * 255.0).round().clamp(0.0, 255.0) as u8;
-		}
-		else {
+		} else {
 			r = (ch[0] / a * 255.0).round().clamp(0.0, 255.0) as u8;
 			g = (ch[1] / a * 255.0).round().clamp(0.0, 255.0) as u8;
 			b = (ch[2] / a * 255.0).round().clamp(0.0, 255.0) as u8;

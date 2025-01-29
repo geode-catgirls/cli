@@ -96,12 +96,9 @@ fn is_valid_geode_dir(_dir: &Path) -> bool {
 	true
 }
 
-pub fn run_profile(
-	config: &Config,
-	profile: Option<String>,
-	background: RunBackground,
-	launch_args: Vec<String>,
-) {
+pub fn run_profile(profile: Option<String>, background: RunBackground, launch_args: Vec<String>) {
+	let config = Config::new().assert_is_setup();
+
 	let profile = &profile
 		.clone()
 		.map(|p| config.get_profile(&Some(p)).map(|p| p.borrow()))
@@ -158,9 +155,10 @@ pub fn run_profile(
 	}
 }
 
-pub fn subcommand(config: &mut Config, cmd: Profile) {
+pub fn subcommand(cmd: Profile) {
 	match cmd {
 		Profile::List => {
+			let config = Config::new().assert_is_setup();
 			for profile in &config.profiles {
 				let name = &profile.borrow().name;
 				let path = &profile.borrow().gd_path;
@@ -181,6 +179,8 @@ pub fn subcommand(config: &mut Config, cmd: Profile) {
 		}
 
 		Profile::Path { profile, dir } => {
+			let config = Config::new();
+
 			let profile = profile
 				.clone()
 				.map(|p| config.get_profile(&Some(p)).map(|p| p.borrow()))
@@ -201,6 +201,8 @@ pub fn subcommand(config: &mut Config, cmd: Profile) {
 		}
 
 		Profile::Switch { profile } => {
+			let mut config = Config::new().assert_is_setup();
+
 			if config.get_profile(&Some(profile.to_owned())).is_none() {
 				fail!("Profile '{}' does not exist", profile);
 			} else if config.current_profile == Some(profile.to_owned()) {
@@ -209,6 +211,7 @@ pub fn subcommand(config: &mut Config, cmd: Profile) {
 				done!("'{}' is now the current profile", &profile);
 				config.current_profile = Some(profile);
 			}
+			config.save();
 		}
 
 		Profile::Add {
@@ -216,6 +219,8 @@ pub fn subcommand(config: &mut Config, cmd: Profile) {
 			location,
 			platform,
 		} => {
+			let mut config = Config::new();
+
 			if config.get_profile(&Some(name.to_owned())).is_some() {
 				fail!("A profile named '{}' already exists", name);
 			} else if !is_valid_geode_dir(&location) {
@@ -248,20 +253,26 @@ pub fn subcommand(config: &mut Config, cmd: Profile) {
 					location,
 					profile.to_string(),
 				)));
+				config.save();
 			}
 		}
 
 		Profile::Remove { name } => {
+			let mut config = Config::new().assert_is_setup();
+
 			if config.get_profile(&Some(name.to_owned())).is_none() {
 				fail!("Profile '{}' does not exist", name);
 			} else {
 				config.profiles.retain(|x| x.borrow().name != name);
 				done!("'{}' has been removed", name);
 			}
+			config.save();
 		}
 
 		Profile::Rename { old, new } => {
+			let mut config = Config::new().assert_is_setup();
 			config.rename_profile(&old, new);
+			config.save();
 		}
 
 		Profile::Run {
@@ -270,7 +281,6 @@ pub fn subcommand(config: &mut Config, cmd: Profile) {
 			stay,
 			launch_args,
 		} => run_profile(
-			config,
 			profile,
 			match (background, stay) {
 				(false, false) => RunBackground::Foreground,

@@ -10,6 +10,8 @@ use reqwest::header::{AUTHORIZATION, USER_AGENT};
 use semver::{Prerelease, Version};
 use serde::Deserialize;
 use std::env;
+#[allow(unused)]
+use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -34,6 +36,7 @@ struct GithubReleaseResponse {
 	assets: Vec<GithubReleaseAsset>,
 }
 
+#[allow(unused)]
 struct LinuxShellConfig {
 	profile: String,
 	profile_bak: String,
@@ -267,6 +270,7 @@ fn set_sdk_env(path: &Path) -> bool {
 	env_success
 }
 
+#[allow(unused)]
 fn detect_user_shell() -> Option<UserShell> {
 	let shell = match env::var("SHELL") {
 		Err(_) => {
@@ -287,6 +291,7 @@ fn detect_user_shell() -> Option<UserShell> {
 	None
 }
 
+#[allow(unused)]
 fn get_linux_shell_info(shell: UserShell, path: &Path) -> Option<LinuxShellConfig> {
 	let home = match env::var("HOME") {
 		Err(_) => return None,
@@ -778,7 +783,7 @@ fn download_xwin(dest: &Path) -> Result<(), Box<dyn std::error::Error>> {
 		.arg("--strip-components=1")
 		.args(["-C", dest.parent().unwrap().to_str().unwrap()])
 		.arg(format!("{name}/xwin"))
-		.output()
+		.status()
 		.nice_unwrap("Failed to extract the archive with 'tar'");
 
 	let _ = std::fs::remove_file(archive_path);
@@ -813,28 +818,39 @@ fn install_linux(
 	let get_winsdk = !splat_path.exists() || force_update_winsdk;
 
 	if get_winsdk {
+		let cache_path = splat_path.parent().unwrap().join(".xwin-cache");
+
 		info!("Installing Windows SDK to {splat_path:?}");
 
 		let _ = std::fs::remove_dir_all(&splat_path);
 
 		let mut cmd = std::process::Command::new(xwin_exe_path);
 
-		cmd.arg("--accept-license")
-			.args(["--arch", &arch])
-			.arg("splat")
-			.args([
-				"--output",
-				splat_path
-					.to_str()
-					.nice_unwrap("Failed to convert path to str"),
-			])
-			.arg("--include-debug-libs");
+		cmd.arg("--accept-license");
+		cmd.args(["--arch", &arch]);
+
+		// these arguments must come before `splat`
 
 		if let Some(winsdk_version) = winsdk_version {
 			cmd.args(["--sdk-version", &winsdk_version]);
 		}
 
-		cmd.output().nice_unwrap("Failed to install Windows SDK");
+		cmd.args([OsStr::new("--cache-dir"), cache_path.as_os_str()]);
+
+		cmd.arg("splat");
+		cmd.args([OsStr::new("--output"), splat_path.as_os_str()]);
+		cmd.arg("--include-debug-libs");
+
+		let status = cmd.status().nice_unwrap("Failed to execute xwin");
+
+		if !status.success() {
+			fatal!(
+				"xwin failed with code {}",
+				status.code().unwrap_or_default()
+			);
+		}
+
+		let _ = std::fs::remove_dir_all(cache_path);
 	}
 
 	if toolchain_path.exists() {
@@ -876,13 +892,15 @@ fn install_linux(
 	done!("Installation complete!");
 }
 
-pub fn subcommand(config: &mut Config, cmd: Sdk) {
+pub fn subcommand(cmd: Sdk) {
 	match cmd {
 		Sdk::Install {
 			reinstall,
 			force,
 			path,
 		} => {
+			let mut config = Config::new().assert_is_setup();
+
 			if reinstall && !uninstall() && !force {
 				return;
 			}
@@ -926,15 +944,24 @@ pub fn subcommand(config: &mut Config, cmd: Sdk) {
 				}
 			};
 
-			install(config, actual_path, force);
+			install(&mut config, actual_path, force);
+			config.save();
 		}
 		Sdk::Uninstall => {
 			uninstall();
 		}
 		Sdk::SetPath { path, r#move } => set_sdk_path(path, r#move),
-		Sdk::Update { branch } => update(config, branch),
+		Sdk::Update { branch } => {
+			let mut config = Config::new().assert_is_setup();
+			update(&mut config, branch);
+			config.save();
+		}
 		Sdk::Version => info!("Geode SDK version: {}", get_version()),
-		Sdk::InstallBinaries { platform, version } => install_binaries(config, platform, version),
+		Sdk::InstallBinaries { platform, version } => {
+			let mut config = Config::new().assert_is_setup();
+			install_binaries(&mut config, platform, version);
+			config.save();
+		}
 
 		#[cfg(not(windows))]
 		Sdk::InstallLinux {
