@@ -40,10 +40,10 @@ fn create_template(template: CreateTemplate) {
 	} else if template.template.contains('/') {
 		(template.template.as_str(), "main")
 	} else if template.template.is_empty() {
-		("geode-catgirls/example-mod", "main")
+		("geode-sdk/example-mod", "main")
 	} else {
 		(
-			"geode-catgirls/example-mod",
+			"geode-sdk/example-mod",
 			match template.template.to_ascii_lowercase().as_str() {
 				"default" => "main",
 				"minimal" => "minimal",
@@ -106,14 +106,14 @@ fn create_template(template: CreateTemplate) {
 	}
 
 	// Add cross-platform action
-	// Download the action from https://raw.githubusercontent.com/geode-catgirls/build-geode-mod/main/examples/multi-platform.yml
+	// Download the action from https://raw.githubusercontent.com/geode-sdk/build-geode-mod/main/examples/multi-platform.yml
 	if template.action {
 		let action_path = template
 			.project_location
 			.join(".github/workflows/multi-platform.yml");
 		fs::create_dir_all(action_path.parent().unwrap())
 			.nice_unwrap("Unable to create .github/workflows directory");
-		let action = reqwest::blocking::get("https://raw.githubusercontent.com/geode-catgirls/build-geode-mod/main/examples/multi-platform.yml").nice_unwrap("Unable to download action");
+		let action = reqwest::blocking::get("https://raw.githubusercontent.com/geode-sdk/build-geode-mod/main/examples/multi-platform.yml").nice_unwrap("Unable to download action");
 		fs::write(
 			action_path,
 			action.text().nice_unwrap("Unable to write action"),
