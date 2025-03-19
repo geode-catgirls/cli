@@ -114,13 +114,13 @@ pub fn build_project(
 			}
 		}
 		PlatformName::IPhoneOS => {
-			if cross_compiling {
+			if cross_compiling && cfg!(not(target_os = "macos")) {
 				fatal!("Sorry! but we do not know of any way to cross-compile to iOS when not using MacOS.");
 			}
-			conf_args.push("-DCMAKE_OSX_ARCHITECTURES=arm64".into());
-			conf_args.push("-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0".into());
 			conf_args.push("-DCMAKE_SYSTEM_NAME=iOS".into());
-			conf_args.push("-DGEODE_DONT_BUILD_TEST_MODS=ON".into());
+			conf_args.push("-DGEODE_TARGET_PLATFORM=iOS".into());
+			// TODO: cli cant install to a mobile device, yet
+			conf_args.push("-DGEODE_DONT_INSTALL_MODS=1".into());
 		}
 	}
 
