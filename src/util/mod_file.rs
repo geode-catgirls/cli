@@ -231,9 +231,7 @@ pub enum PlatformName {
 	Android,
 	Android32,
 	Android64,
-	#[serde(rename = "ios")]
-	#[value(alias = "ios")]
-	IPhoneOS,
+	IOS,
 }
 
 impl PlatformName {
@@ -247,7 +245,7 @@ impl PlatformName {
 		} else if cfg!(target_os = "macos") {
 			Some(PlatformName::MacOS)
 		} else if cfg!(target_os = "ios") {
-			Some(PlatformName::IPhoneOS)
+			Some(PlatformName::IOS)
 		} else {
 			None
 		}
@@ -265,7 +263,7 @@ impl Display for PlatformName {
 			P::Android => "android",
 			P::Android32 => "android32",
 			P::Android64 => "android64",
-			P::IPhoneOS => "ios",
+			P::IOS => "ios",
 		})
 	}
 }
@@ -280,7 +278,7 @@ fn all_platforms() -> HashSet<PlatformName> {
 		P::Android,
 		P::Android32,
 		P::Android64,
-		P::IPhoneOS
+		P::IOS
 	])
 }
 
