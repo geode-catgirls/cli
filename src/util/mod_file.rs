@@ -278,7 +278,7 @@ fn all_platforms() -> HashSet<PlatformName> {
 		P::Android,
 		P::Android32,
 		P::Android64,
-		P::IOS
+		P::IOS,
 	])
 }
 
