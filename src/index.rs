@@ -5,9 +5,8 @@ use crate::{done, fatal, index_admin, index_auth, index_dev, info, NiceUnwrap};
 use clap::Subcommand;
 use reqwest::header::USER_AGENT;
 use semver::VersionReq;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
-use sha3::{Digest, Sha3_256};
 use std::fs;
 use std::io::Cursor;
 use std::path::PathBuf;
@@ -33,7 +32,7 @@ pub enum Index {
 		token: Option<String>,
 
 		#[clap(long, conflicts_with = "token")]
-		github_token: Option<String>
+		github_token: Option<String>,
 	},
 
 	/// Invalidate all existing access tokens (logout)
@@ -140,18 +139,16 @@ pub fn install_mod(
 		.mods_dir()
 		.join(format!("{id}.geode"));
 
-	let mut hasher = Sha3_256::new();
-	hasher.update(&bytes);
-	let hash = hex::encode(hasher.finalize());
+	let hash = sha256::digest(bytes.as_ref());
 
-	if hash != found_version.version {
+	if hash != found_version.hash {
 		fatal!(
-			"Downloaded file doesn't match nice_unwraped hash\n\
+			"Downloaded file doesn't match expected hash\n\
 			    {hash}\n\
 			 vs {}\n\
 			Try again, and if the issue persists, report this on GitHub: \
 			https://github.com/geode-sdk/cli/issues/new",
-			found_version.version
+			found_version.hash
 		);
 	}
 
@@ -353,15 +350,13 @@ pub fn subcommand(cmd: Index) {
 	match cmd {
 		Index::Install { id, version } => {
 			let config = Config::new().assert_is_setup();
-			install_mod(
-				&config,
-				&id,
-				&version.unwrap_or(VersionReq::STAR),
-				false,
-			);
+			install_mod(&config, &id, &version.unwrap_or(VersionReq::STAR), false);
 			done!("Mod installed");
 		}
-		Index::Login { token, github_token } => index_auth::login(config, token, github_token),
+		Index::Login {
+			token,
+			github_token,
+		} => index_auth::login(config, token, github_token),
 		Index::Invalidate => index_auth::invalidate(config),
 		Index::Url { url } => {
 			if let Some(u) = url {
